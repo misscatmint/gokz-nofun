@@ -6,11 +6,11 @@
 
 public Plugin myinfo =
 {
-    name        = "Anti-Fun",
+    name        = "gokz-nofun",
     author      = "jvnipers",
     description = "Breaks all func_breakable entities on command",
     version     = "0.0.1",
-    url         = "https://github.com/FemboyKZ/anti-fun"
+    url         = "https://github.com/misscatmint/gokz-nofun"
 };
 
 public void OnPluginStart()
