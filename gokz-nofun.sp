@@ -84,6 +84,29 @@ public void OnMapStart()
     bool mightHeal = false;
     for (int i = 0; i < totalEntries; i++)
     {
+        // Checks for determining what func_beakables we think players
+        // can break:
+        //
+        // 1. It MUST NOT have the SF_BREAK_TRIGGER_ONLY spawn flag.
+        // 2. Otherwise, if it has the SF_BREAK_PRESSURE flag, we assume
+        //    it can always be broken by players (the other conditions
+        //    below are ignored in this case).
+        // 3. It MUST NOT have a material of MATERIAL_UNBREAKABLE_GLASS.
+        // 4. Otherwise, if it has the SF_BREAK_TOUCH spawn flag and its
+        //    health is low enough to be broken by a player colliding at
+        //    3500 units of velocity or lower, we assume it can always be
+        //    broken by players (and any remaining conditions below are
+        //    ignored).
+        // 5. If it does not have the SF_BREAK_TRIGGER_ONLY or
+        //    SF_BREAK_PRESSURE spawn flags, its material is not
+        //    MATERIAL_UNBREAKABLE_GLASS, and it either does not have the
+        //    SF_BREAK_TOUCH spawn flag or it can be broken through
+        //    realistic player collisions, then it also MUST NOT have
+        //    OnHealthChanged or OnTakeDamage outputs.
+        //
+        // Note that these checks are run in order, so if condition #2 is
+        // satisfied, further conditions are not checked enforced. This
+        // also applies to condition #4.
         EntityLumpEntry entry = EntityLump.Get(i);
         key = entry.FindKey("classname");
         if (key == -1)
