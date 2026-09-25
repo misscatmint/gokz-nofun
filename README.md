@@ -24,8 +24,9 @@ players can break:
 4. Its health MUST be greater than 0.
 5. If it has the `Break on Touch` spawn flag, its health MUST be low enough to
    be broken by a player colliding at 3500 units of velocity or lower.
-6. If all other conditions are satisfied, then it also MUST NOT have
-   `OnHealthChanged` or `OnTakeDamage` outputs.
+6. If all other conditions are satisfied, then it also MUST NOT have outputs
+   that use `AddHealth`, `AddOutput`, `SetDamageFilter`, or `SetHealth` inputs
+   (or any other input with `Script` in the name).
 
 Notes:
 
@@ -34,13 +35,6 @@ Notes:
   enough damage on the breakable to break it (through explosions, physics,
   crushing, etc.). The plugin ignores this value and will break these entities
   even if the map provides no way to break them.
-- The plugin makes no effort to see what an entity with
-  `OnHealthChanged`/`OnTakeDamage` outputs does in them. These are often used
-  to make self-healing entities, which we do not want to break. But this has
-  the limitation that the plugin will not break entities that use them but do
-  not self-heal (which are breakables that players could still break).
-- The plugin makes no effort to check for other outputs that could heal the
-  entity.
 - The plugin makes no effort to check for `logic_script` entities that use
   VScript to heal breakables.
 - Other entities that can respawn breakables (like `point_template` entities)

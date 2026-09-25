@@ -16,6 +16,14 @@
 #define MAX_TOUCH_SPEED        3500 // highest sv_maxvelocity value in GOKZ
 #define TOUCH_SPEED_PER_HEALTH 100
 
+static const char g_HealingInputs[5][16] = {
+    "AddHealth",
+    "AddOutput",
+    "Script",
+    "SetDamageFilter",
+    "SetHealth"
+};
+
 methodmap IntStringMap < StringMap
 {
     public IntStringMap()
@@ -52,7 +60,7 @@ public Plugin myinfo =
     name        = "gokz-nofun",
     author      = "jvnipers, catmint",
     description = "Breaks all func_breakable entities on command",
-    version     = "1.0.2",
+    version     = "1.0.3",
     url         = "https://github.com/misscatmint/gokz-nofun"
 };
 
@@ -98,7 +106,9 @@ public void OnMapStart()
         //    low enough to be broken by a player colliding at 3500 units
         //    of velocity or lower.
         // 6. If all other conditions are satisfied, then it also MUST NOT
-        //    have OnHealthChanged or OnTakeDamage outputs.
+        //    have outputs that use AddHealth, AddOutput, SetDamageFilter,
+        //    or SetHealth inputs (or any other input with Script in the
+        //    name).
         //
         // Notes:
         // - An entity could have a minhealthdmg value that makes it
@@ -107,14 +117,6 @@ public void OnMapStart()
         //   break it (through explosions, physics, crushing, etc.). The
         //   plugin ignores this value and will break these entities even if
         //   the map provides no way to break them.
-        // - This makes no effort to see what an entity with
-        //   OnHealthChanged/OnTakeDamage outputs does in them. These are
-        //   often used to make self-healing entities, which we do not want to
-        //   break. But this has the limitation that the plugin will not break
-        //   entities that use them but do not self-heal (which are
-        //   breakables that players could still break).
-        // - This makes no effort to check for other outputs that could heal
-        //   the entity.
         // - The plugin makes no effort to check for logic_script entities
         //   that use VScript to heal breakables.
         // - Other entities that can respawn breakables (like point_template
@@ -180,7 +182,8 @@ public void OnMapStart()
             entry.Get(key, _, _, value, sizeof(value));
             health = StringToInt(value);
         }
-        if (health < 1) {
+        if (health < 1)
+        {
             delete entry;
             continue;
         }
@@ -199,10 +202,22 @@ public void OnMapStart()
         totalOutputs = entry.Length;
         for (int j = 0; j < totalOutputs; j++)
         {
-            entry.Get(j, keyName, sizeof(keyName), _, _);
-            if (StrEqual(keyName, "onhealthchanged", false) || StrEqual(keyName, "ontakedamage", false))
+            entry.Get(j, keyName, sizeof(keyName), value, sizeof(value));
+            if (StrContains(keyName, "On", false) != 0)
             {
-                mightHeal = true;
+                continue;
+            }
+
+            for (int k = 0; k < sizeof(g_HealingInputs); k++)
+            {
+                if (StrContains(value, g_HealingInputs[k], false) != -1)
+                {
+                    mightHeal = true;
+                    break;
+                }
+            }
+            if (mightHeal)
+            {
                 break;
             }
         }
