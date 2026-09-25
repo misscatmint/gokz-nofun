@@ -52,7 +52,7 @@ public Plugin myinfo =
     name        = "gokz-nofun",
     author      = "jvnipers, catmint",
     description = "Breaks all func_breakable entities on command",
-    version     = "1.0.1",
+    version     = "1.0.2",
     url         = "https://github.com/misscatmint/gokz-nofun"
 };
 
@@ -93,19 +93,30 @@ public void OnMapStart()
         //    are not checked).
         // 3. It MUST NOT have a material type property of
         //    MATERIAL_UNBREAKABLE_GLASS.
-        // 4. If it has the SF_BREAK_TOUCH spawn flag, its health MUST be
+        // 4. Its health MUST be greater than 0.
+        // 5. If it has the SF_BREAK_TOUCH spawn flag, its health MUST be
         //    low enough to be broken by a player colliding at 3500 units
         //    of velocity or lower.
-        // 5. If all other conditions are satisfied, then it also MUST NOT
+        // 6. If all other conditions are satisfied, then it also MUST NOT
         //    have OnHealthChanged or OnTakeDamage outputs.
         //
         // Notes:
+        // - An entity could have a minhealthdmg value that makes it
+        //   unbreakable through knife or weapon damage. However, the map
+        //   itself could inflict high enough damage on the breakable to
+        //   break it (through explosions, physics, crushing, etc.). The
+        //   plugin ignores this value and will break these entities even if
+        //   the map provides no way to break them.
         // - This makes no effort to see what an entity with
         //   OnHealthChanged/OnTakeDamage outputs does in them. These are
         //   often used to make self-healing entities, which we do not want to
         //   break. But this has the limitation that the plugin will not break
         //   entities that use them but do not self-heal (which are
         //   breakables that players could still break).
+        // - This makes no effort to check for other outputs that could heal
+        //   the entity.
+        // - The plugin makes no effort to check for logic_script entities
+        //   that use VScript to heal breakables.
         // - Other entities that can respawn breakables (like point_template
         //   entities) are not considered. It is possible for the map to
         //   respawn breakables the plugin broke.
@@ -169,6 +180,11 @@ public void OnMapStart()
             entry.Get(key, _, _, value, sizeof(value));
             health = StringToInt(value);
         }
+        if (health < 1) {
+            delete entry;
+            continue;
+        }
+
         if (spawnFlags & SF_BREAK_TOUCH != 0)
         {
             if (health * TOUCH_SPEED_PER_HEALTH <= MAX_TOUCH_SPEED)
