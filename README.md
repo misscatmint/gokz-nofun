@@ -23,7 +23,8 @@ players can break:
 3. It MUST NOT have a material type property of `Unbreakable Glass`.
 4. Its health MUST be greater than 0.
 5. If it has the `Break on Touch` spawn flag, its health MUST be low enough to
-   be broken by a player colliding at 3500 units of velocity or lower.
+   be broken by a player colliding at 3500 units of velocity or lower. If it
+   can be broken by player collision, the conditions below are not checked.
 6. If all other conditions are satisfied, then it also MUST NOT have outputs
    that use `AddHealth`, `AddOutput`, `SetDamageFilter`, or `SetHealth` inputs
    (or any other input with `Script` in the name).

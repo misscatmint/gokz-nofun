@@ -24,14 +24,14 @@ static const char g_HealingInputs[5][16] = {
     "SetHealth"
 };
 
-StringMap g_Breakables = null;
+StringMap g_HealingBreakables = null;
 
 public Plugin myinfo =
 {
     name        = "gokz-nofun",
     author      = "jvnipers, catmint",
     description = "Breaks all func_breakable entities on command",
-    version     = "1.0.3",
+    version     = "1.0.4",
     url         = "https://github.com/misscatmint/gokz-nofun"
 };
 
@@ -46,113 +46,32 @@ public void OnPluginStart()
 
 public void OnMapStart()
 {
-    if (g_Breakables != null)
+    if (g_HealingBreakables != null)
     {
         return;
     }
 
-    g_Breakables = new StringMap();
+    g_HealingBreakables = new StringMap();
     int totalEntries = EntityLump.Length();
     char keyName[64];
     char value[64];
     char hammerId[16];
-    int spawnFlags = 0;
-    int totalOutputs = -1;
-    int health = 0;
+    int totalKeys = 0;
     bool mightHeal = false;
     for (int i = 0; i < totalEntries; i++)
     {
-        // Checks (in order) for determining what func_beakables we think
-        // players can break:
-        //
-        // 1. It MUST NOT have the SF_BREAK_TRIGGER_ONLY spawn flag.
-        // 2. If it has the SF_BREAK_PRESSURE flag, we assume it can
-        //    always be broken by players (and the other conditions below
-        //    are not checked).
-        // 3. It MUST NOT have a material type property of
-        //    MATERIAL_UNBREAKABLE_GLASS.
-        // 4. Its health MUST be greater than 0.
-        // 5. If it has the SF_BREAK_TOUCH spawn flag, its health MUST be
-        //    low enough to be broken by a player colliding at 3500 units
-        //    of velocity or lower.
-        // 6. If all other conditions are satisfied, then it also MUST NOT
-        //    have outputs that use AddHealth, AddOutput, SetDamageFilter,
-        //    or SetHealth inputs (or any other input with Script in the
-        //    name).
-        //
-        // Notes:
-        // - An entity could have a minhealthdmg value that makes it
-        //   unbreakable through knife or weapon damage. However, the map
-        //   itself could inflict high enough damage on the breakable to
-        //   break it (through explosions, physics, crushing, etc.). The
-        //   plugin ignores this value and will break these entities even if
-        //   the map provides no way to break them.
-        // - The plugin makes no effort to check for logic_script entities
-        //   that use VScript to heal breakables.
-        // - Other entities that can respawn breakables (like point_template
-        //   entities) are not considered. It is possible for the map to
-        //   respawn breakables the plugin broke.
         EntityLumpEntry entry = EntityLump.Get(i);
-        if (entry.GetNextKey("classname", value, sizeof(value)) == -1 || !StrEqual(value, "func_breakable"))
+        if (entry.GetNextKey("classname", value, sizeof(value)) == -1 ||
+            !StrEqual(value, "func_breakable") ||
+            entry.GetNextKey("hammerid", hammerId, sizeof(hammerId)) == -1)
         {
-            delete entry;
-            continue;
-        }
-
-        if (entry.GetNextKey("hammerid", hammerId, sizeof(hammerId)) == -1)
-        {
-            delete entry;
-            continue;
-        }
-
-        spawnFlags = 0;
-        if (entry.GetNextKey("spawnflags", value, sizeof(value)) != -1)
-        {
-            spawnFlags = StringToInt(value);
-        }
-        if (spawnFlags & SF_BREAK_TRIGGER_ONLY != 0)
-        {
-            delete entry;
-            continue;
-        }
-        if (spawnFlags & SF_BREAK_PRESSURE != 0)
-        {
-            g_Breakables.SetValue(hammerId, true);
-            delete entry;
-            continue;
-        }
-
-        if (entry.GetNextKey("material", value, sizeof(value)) != -1 && StringToInt(value) == MATERIAL_UNBREAKABLE_GLASS)
-        {
-            delete entry;
-            continue;
-        }
-
-        health = 0;
-        if (entry.GetNextKey("health", value, sizeof(value)) != -1)
-        {
-            // If this overflows, the return value will be -1
-            health = StringToInt(value);
-        }
-        if (health < 1)
-        {
-            delete entry;
-            continue;
-        }
-
-        if (spawnFlags & SF_BREAK_TOUCH != 0)
-        {
-            if (health * TOUCH_SPEED_PER_HEALTH <= MAX_TOUCH_SPEED)
-            {
-                g_Breakables.SetValue(hammerId, true);
-            }
             delete entry;
             continue;
         }
 
         mightHeal = false;
-        totalOutputs = entry.Length;
-        for (int j = 0; j < totalOutputs; j++)
+        totalKeys = entry.Length;
+        for (int j = 0; j < totalKeys; j++)
         {
             entry.Get(j, keyName, sizeof(keyName), value, sizeof(value));
             if (StrContains(keyName, "On", false) != 0)
@@ -170,39 +89,55 @@ public void OnMapStart()
             }
             if (mightHeal)
             {
+                g_HealingBreakables.SetValue(hammerId, true);
                 break;
             }
         }
 
-        if (mightHeal)
-        {
-            delete entry;
-            continue;
-        }
-
-        g_Breakables.SetValue(hammerId, true);
         delete entry;
     }
 }
 
 public void OnMapEnd()
 {
-    if (g_Breakables != null)
+    if (g_HealingBreakables != null)
     {
-        delete g_Breakables;
-        g_Breakables = null;
+        delete g_HealingBreakables;
+        g_HealingBreakables = null;
     }
 }
 
 static bool PlayerCanBreak(int entity)
 {
-    if (!HasEntProp(entity, Prop_Data, "m_iHammerID"))
+    int spawnFlags = GetEntProp(entity, Prop_Data, "m_spawnflags");
+    if (spawnFlags & SF_BREAK_TRIGGER_ONLY != 0)
     {
         return false;
     }
+    if (spawnFlags & SF_BREAK_PRESSURE != 0)
+    {
+        return true;
+    }
+
+    if (GetEntProp(entity, Prop_Data, "m_Material") == MATERIAL_UNBREAKABLE_GLASS)
+    {
+        return false;
+    }
+
+    int health = GetEntProp(entity, Prop_Data, "m_iHealth");
+    if (health < 1)
+    {
+        return false;
+    }
+
+    if (spawnFlags & SF_BREAK_TOUCH != 0)
+    {
+        return health * TOUCH_SPEED_PER_HEALTH <= MAX_TOUCH_SPEED;
+    }
+
     char hammerId[16];
     IntToString(GetEntProp(entity, Prop_Data, "m_iHammerID"), hammerId, sizeof(hammerId));
-    return g_Breakables.ContainsKey(hammerId);
+    return !g_HealingBreakables.ContainsKey(hammerId);
 }
 
 Action Cmd_BreakAll(int client, int args)
