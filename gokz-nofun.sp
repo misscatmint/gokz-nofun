@@ -24,36 +24,7 @@ static const char g_HealingInputs[5][16] = {
     "SetHealth"
 };
 
-methodmap IntStringMap < StringMap
-{
-    public IntStringMap()
-    {
-        return view_as<IntStringMap>(new StringMap());
-    }
-
-    public void SetIntKey(int key, any value)
-    {
-        char keyStr[16];
-        IntToString(key, keyStr, sizeof(keyStr));
-        this.SetValue(keyStr, value);
-    }
-
-    public bool GetIntKey(int key, any &value)
-    {
-        char keyStr[16];
-        IntToString(key, keyStr, sizeof(keyStr));
-        return this.GetValue(keyStr, value);
-    }
-
-    public bool ContainsIntKey(int key)
-    {
-        char keyStr[16];
-        IntToString(key, keyStr, sizeof(keyStr));
-        return this.ContainsKey(keyStr);
-    }
-}
-
-IntStringMap g_Breakables = null;
+StringMap g_Breakables = null;
 
 public Plugin myinfo =
 {
@@ -80,12 +51,11 @@ public void OnMapStart()
         return;
     }
 
-    g_Breakables = new IntStringMap();
+    g_Breakables = new StringMap();
     int totalEntries = EntityLump.Length();
-    int key = -1;
     char keyName[64];
     char value[64];
-    int hammerId = -1;
+    char hammerId[16];
     int spawnFlags = 0;
     int totalOutputs = -1;
     int health = 0;
@@ -123,33 +93,21 @@ public void OnMapStart()
         //   entities) are not considered. It is possible for the map to
         //   respawn breakables the plugin broke.
         EntityLumpEntry entry = EntityLump.Get(i);
-        key = entry.FindKey("classname");
-        if (key == -1)
-        {
-            delete entry;
-            continue;
-        }
-        entry.Get(key, _, _, value, sizeof(value));
-        if (!StrEqual(value, "func_breakable"))
+        if (entry.GetNextKey("classname", value, sizeof(value)) == -1 || !StrEqual(value, "func_breakable"))
         {
             delete entry;
             continue;
         }
 
-        key = entry.FindKey("hammerid");
-        if (key == -1)
+        if (entry.GetNextKey("hammerid", hammerId, sizeof(hammerId)) == -1)
         {
             delete entry;
             continue;
         }
-        entry.Get(key, _, _, value, sizeof(value));
-        hammerId = StringToInt(value);
 
         spawnFlags = 0;
-        key = entry.FindKey("spawnflags");
-        if (key != -1)
+        if (entry.GetNextKey("spawnflags", value, sizeof(value)) != -1)
         {
-            entry.Get(key, _, _, value, sizeof(value));
             spawnFlags = StringToInt(value);
         }
         if (spawnFlags & SF_BREAK_TRIGGER_ONLY != 0)
@@ -159,27 +117,21 @@ public void OnMapStart()
         }
         if (spawnFlags & SF_BREAK_PRESSURE != 0)
         {
-            g_Breakables.SetIntKey(hammerId, true);
+            g_Breakables.SetValue(hammerId, true);
             delete entry;
             continue;
         }
 
-        key = entry.FindKey("material");
-        if (key != -1)
+        if (entry.GetNextKey("material", value, sizeof(value)) != -1 && StringToInt(value) == MATERIAL_UNBREAKABLE_GLASS)
         {
-            entry.Get(key, _, _, value, sizeof(value));
-            if (StringToInt(value) == MATERIAL_UNBREAKABLE_GLASS)
-            {
-                delete entry;
-                continue;
-            }
+            delete entry;
+            continue;
         }
 
         health = 0;
-        key = entry.FindKey("health");
-        if (key != -1)
+        if (entry.GetNextKey("health", value, sizeof(value)) != -1)
         {
-            entry.Get(key, _, _, value, sizeof(value));
+            // If this overflows, the return value will be -1
             health = StringToInt(value);
         }
         if (health < 1)
@@ -192,7 +144,7 @@ public void OnMapStart()
         {
             if (health * TOUCH_SPEED_PER_HEALTH <= MAX_TOUCH_SPEED)
             {
-                g_Breakables.SetIntKey(hammerId, true);
+                g_Breakables.SetValue(hammerId, true);
             }
             delete entry;
             continue;
@@ -228,7 +180,7 @@ public void OnMapStart()
             continue;
         }
 
-        g_Breakables.SetIntKey(hammerId, true);
+        g_Breakables.SetValue(hammerId, true);
         delete entry;
     }
 }
@@ -248,7 +200,9 @@ static bool PlayerCanBreak(int entity)
     {
         return false;
     }
-    return g_Breakables.ContainsIntKey(GetEntProp(entity, Prop_Data, "m_iHammerID"));
+    char hammerId[16];
+    IntToString(GetEntProp(entity, Prop_Data, "m_iHammerID"), hammerId, sizeof(hammerId));
+    return g_Breakables.ContainsKey(hammerId);
 }
 
 Action Cmd_BreakAll(int client, int args)
