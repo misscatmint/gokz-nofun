@@ -1,43 +1,65 @@
 # gokz-nofun
 
-Plugin breaks all `func_breakable` entities on command.
+Breaks all breakables in the map on command.
 
-This plugin will only break entities it's reasonably sure players can break.
-It does this to ensure gameplay elements on a map aren't broken and the map
-can still be completed.
+This plugin will only break breakables it's reasonably sure players can
+actually break. It does this to ensure gameplay elements on a map aren't
+broken and the map can still be completed.
 
 ## Commands
 
-- `sm_nofun` / `sm_breakall` - break all player-breakable entities.
+- `sm_nofun` / `sm_breakall` - break all player-breakable breakables.
 - `sm_checkfun` / `sm_checknofun` / `sm_checkbreakall` - list
-  player-breakable entities.
+  player-breakable breakables, and how each one can be broken (by pressure,
+  touch, or damage).
 
-## What entities the plugin will break
+## Requirements
 
-Checks (in order) for determining what `func_beakable` entities we think
-players can break:
+- SourceMod 1.12 or newer.
 
-1. It MUST NOT have the `Only Break on Trigger` spawn flag.
-2. If it has the `Break on Pressure` flag, we assume it can always be broken
-   by players (and the other conditions below are not checked).
-3. It MUST NOT have a material type property of `Unbreakable Glass`.
-4. Its health MUST be greater than 0.
-5. If it has the `Break on Touch` spawn flag, its health MUST be low enough to
-   be broken by a player colliding at 3500 units of velocity or lower. If it
-   can be broken by player collision, the conditions below are not checked.
-6. If all other conditions are satisfied, then it also MUST NOT have outputs
-   that use `AddHealth`, `AddOutput`, `SetDamageFilter`, or `SetHealth` inputs
-   (or any other input with `Script` in the name).
+## What breakables the plugin will break
 
-Notes:
+*This section and the notes below are mainly for mappers and server admins.*
 
-- An entity could have a `minhealthdmg` value that makes it unbreakable
-  through knife or weapon damage. However, the map itself could inflict high
-  enough damage on the breakable to break it (through explosions, physics,
-  crushing, etc.). The plugin ignores this value and will break these entities
-  even if the map provides no way to break them.
-- The plugin makes no effort to check for `logic_script` entities that use
-  VScript to heal breakables.
-- Other entities that can respawn breakables (like `point_template` entities)
-  are not considered. It is possible for the map to respawn breakables the
-  plugin broke.
+A `func_breakable` is broken only if a player could break it themselves. It's
+always skipped if it has the `Only Break on Trigger` flag or the `Unbreakable
+Glass` material. Otherwise, it's broken if a player could break it in one of
+these ways:
+
+- **Standing on it** - it has the `Break on Pressure` flag.
+- **Colliding with it** - it has the `Break on Touch` flag, and its health and
+  `minhealthdmg` are both 35 or less. Colliding with a breakable deals 1
+  damage for every 100 u/s of speed, and players can reach up to 3500 u/s, so
+  the most damage a player can deal this way is 35. (This works even if it has
+  0 health.)
+- **Shooting or knifing it** - it can take damage (the engine turns this off
+  for breakables with 0 health), and its `minhealthdmg` is at most 86, the most
+  damage a player can deal in one hit (with an R8).
+
+Colliding with it and shooting it don't count if the map controls the
+breakable in a way that could heal it, which the plugin considers true in any
+of these cases:
+
+- It has an `OnHealthChanged` output. The plugin breaks breakables without
+  damaging them, so these reactions would never happen.
+- One of its own outputs mentions `AddHealth`, `AddOutput`, `Script`,
+  `SetDamageFilter`, or `SetHealth`.
+- Another entity's output targets it by name and mentions one of those words,
+  like a `logic_timer` firing `SetHealth` at it.
+
+Spawn flags, material types, `minhealthdmg`, and `takedamage` are read from
+live entity data. Outputs are read from map data when the map loads.
+
+### Caveats
+
+- The plugin could break a breakable the map tries to protect with:
+  - outputs created while the map is running, including ones added with
+    `AddOutput`;
+  - outputs that target it by classname, or with a `*` anywhere but the end of
+    its name;
+  - outputs that target `!activator`, `!caller`, or other `!` names; or
+  - VScript, such as a `logic_script` that heals it.
+- The map may bring back breakables the plugin broke, for example with a
+  `point_template` entity.
+- Breakables are broken without an activator, so `OnBreak` outputs that target
+  `!activator` do nothing.
