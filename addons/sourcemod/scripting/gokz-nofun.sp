@@ -16,8 +16,9 @@
 #define DAMAGE_EVENTS_ONLY 1
 
 // Touch damage is GetSmoothedVelocity().Length() * 0.01, applied as DMG_CRUSH
-// (which breakables don't scale). The resulting health is truncated to an
-// integer, so at least 1 damage (100 u/s) is needed to break anything.
+// (which breakables don't scale). The damage is truncated to an integer before
+// it's taken from health, so at least 1 damage (100 u/s) is needed to break
+// anything.
 #define MAX_TOUCH_SPEED        3500 // highest sv_maxvelocity value in GOKZ
 #define TOUCH_SPEED_PER_DAMAGE 100
 
@@ -269,7 +270,7 @@ static BreakMethod GetPlayerBreakMethod(int entity) {
     int minHealthDmg = GetEntProp(entity, Prop_Data, "m_iMinHealthDmg");
 
     // Touch breaking forces takedamage on, so it works even at health 0. The
-    // damage must still reach health (at least 1) and minhealthdmg.
+    // damage must still reach health, minhealthdmg and 1 (see above).
     if ((spawnFlags & SF_BREAK_TOUCH) != 0) {
         int health = GetEntProp(entity, Prop_Data, "m_iHealth");
         int required = health > 1 ? health : 1;
