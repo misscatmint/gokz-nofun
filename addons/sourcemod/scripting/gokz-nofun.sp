@@ -10,6 +10,8 @@
 
 #define MATERIAL_UNBREAKABLE_GLASS 7
 
+#define FSOLID_NOT_SOLID (1 << 2)
+
 #define DAMAGE_NO          0
 #define DAMAGE_EVENTS_ONLY 1
 
@@ -25,6 +27,10 @@
 #define MAX_PLAYER_HIT_DAMAGE 86
 
 #define MAX_TARGET_NAME 128
+
+// Breaking everything in one tick sends every break effect in the same network
+// update, which can hitch clients or overflow the engine's temp entity buffer.
+#define BREAKS_PER_TICK 4
 
 enum BreakMethod {
     Break_None = 0,
@@ -60,6 +66,8 @@ StringMap g_MapControlledBreakables = null;
 // without an activator, so the output does nothing, and once the breakable is
 // gone no player can trigger it either.
 StringMap g_ActivatorBreakables = null;
+// Entity references still to be broken. Non-null while a break is running.
+ArrayList g_BreakQueue = null;
 
 public Plugin myinfo = {
     name        = "gokz-nofun",
@@ -178,6 +186,7 @@ public void OnMapStart() {
 public void OnMapEnd() {
     delete g_MapControlledBreakables;
     delete g_ActivatorBreakables;
+    delete g_BreakQueue;
 }
 
 static bool IsOutputKey(const char[] key) {
@@ -232,6 +241,12 @@ static BreakMethod GetPlayerBreakMethod(int entity) {
     // BreakTouch returns before the touch and pressure checks, and the Break
     // input does nothing, when IsBreakable() is false.
     if (GetEntProp(entity, Prop_Data, "m_Material") == MATERIAL_UNBREAKABLE_GLASS)
+        return Break_None;
+
+    // Players can't touch, stand on or shoot a non-solid breakable. Die() also
+    // sets this before firing OnBreak, so it catches breakables that already
+    // broke but haven't been removed yet (removal waits 0.1s).
+    if ((GetEntProp(entity, Prop_Data, "m_usSolidFlags") & FSOLID_NOT_SOLID) != 0)
         return Break_None;
 
     // Every way a player breaks it passes them as the activator, including
@@ -294,6 +309,15 @@ static Action RunNoFun(int client, bool breakThem) {
     float origin[3];
     char targetname[MAX_TARGET_NAME];
 
+    if (breakThem) {
+        if (g_BreakQueue != null) {
+            ReplyToCommand(client,
+                "Hold your horses! I'm still breaking things! >:O");
+            return Plugin_Handled;
+        }
+        g_BreakQueue = new ArrayList();
+    }
+
     int count = 0;
     int entity = -1;
     while ((entity = FindEntityByClassname(entity, "func_breakable")) != -1) {
@@ -303,7 +327,7 @@ static Action RunNoFun(int client, bool breakThem) {
 
         ++count;
         if (breakThem) {
-            AcceptEntityInput(entity, "Break");
+            g_BreakQueue.Push(EntIndexToEntRef(entity));
             continue;
         }
 
@@ -319,14 +343,49 @@ static Action RunNoFun(int client, bool breakThem) {
             g_BreakMethodNames[method], origin[0], origin[1], origin[2]);
     }
 
+    if (breakThem) {
+        if (count > 0)
+            RequestFrame(Frame_BreakBatch, g_BreakQueue);
+        else
+            delete g_BreakQueue;
+    }
+
     if (count == 0)
         ReplyToCommand(client,
             "The fun's already over. There's nothing to break :(");
     else if (breakThem)
         ReplyToCommand(client,
-            "No more fun. Broke %d breakable%s >:(", count, count > 1 ? "s" : "");
+            "No more fun. Breaking %d breakable%s >:(", count, count > 1 ? "s" : "");
     else if (GetCmdReplySource() != SM_REPLY_TO_CONSOLE)
         ReplyToCommand(client,
             "%d breakable%s >:/ (see console)", count, count > 1 ? "s" : "");
     return Plugin_Handled;
+}
+
+// Breaks up to BREAKS_PER_TICK queued breakables, then schedules itself for the
+// next frame until the queue is empty.
+void Frame_BreakBatch(ArrayList queue) {
+    // The queue was deleted by a map change after this frame was requested.
+    if (queue != g_BreakQueue)
+        return;
+
+    int broken = 0;
+    while (broken < BREAKS_PER_TICK && queue.Length > 0) {
+        int last = queue.Length - 1;
+        int entity = EntRefToEntIndex(queue.Get(last));
+        queue.Erase(last);
+
+        // Skip breakables removed or changed since the command ran, including
+        // ones already broken by a player, the map or an explosion.
+        if (entity != INVALID_ENT_REFERENCE &&
+                GetPlayerBreakMethod(entity) != Break_None) {
+            AcceptEntityInput(entity, "Break");
+            ++broken;
+        }
+    }
+
+    if (queue.Length > 0)
+        RequestFrame(Frame_BreakBatch, queue);
+    else
+        delete g_BreakQueue;
 }
