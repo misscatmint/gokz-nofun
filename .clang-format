@@ -1,0 +1,32 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 80
+BreakBeforeBraces: Attach
+BreakAfterAttributes: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortEnumsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+SortIncludes: Never
+AlignConsecutiveMacros: Consecutive
+ContinuationIndentWidth: 4
+AlignAfterOpenBracket: Align
+AttributeMacros:
+  - public
+  - stock
+  - forward
+  - native
+  - normal
+  - static
+TypenameMacros:
+  - Action
+  - Plugin
+  - Handle
+  - Cookie
+  - ConVar
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+Cpp11BracedListStyle: false
+BreakStringLiterals: false
