@@ -33,12 +33,14 @@ these ways:
   the most damage a player can deal this way is 35. (This works even if it has
   0 health.)
 - **Shooting or knifing it** - it can take damage (the engine turns this off
-  for breakables with 0 health), and its `minhealthdmg` is at most 86, the most
-  damage a player can deal in one hit (with an R8).
+  for breakables with 0 health, and damage doesn't lower health if the map has
+  set its `takedamage` to `events only`), and its `minhealthdmg` is at most
+  86, the most damage a player can deal in one hit (with an R8).
 
-Colliding with it and shooting it don't count if the map controls the
-breakable in a way that could heal it, which the plugin considers true in any
-of these cases:
+Colliding with it and shooting it don't count if it has a damage filter, since
+the plugin can't tell ahead of time whether players pass it. They also don't
+count if the map controls the breakable in a way that could heal it, which the
+plugin considers true in any of these cases:
 
 - It has an `OnHealthChanged` output. The plugin breaks breakables without
   damaging them, so these reactions would never happen.
@@ -47,8 +49,9 @@ of these cases:
 - Another entity's output targets it by name and mentions one of those words,
   like a `logic_timer` firing `SetHealth` at it.
 
-Spawn flags, material types, `minhealthdmg`, and `takedamage` are read from
-live entity data. Outputs are read from map data when the map loads.
+Spawn flags, material types, `minhealthdmg`, `takedamage`, and damage filters
+are read from live entity data. Outputs are read from map data when the map
+loads.
 
 ### Caveats
 

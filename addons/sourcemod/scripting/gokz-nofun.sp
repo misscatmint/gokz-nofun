@@ -10,7 +10,8 @@
 
 #define MATERIAL_UNBREAKABLE_GLASS 7
 
-#define DAMAGE_NO 0
+#define DAMAGE_NO          0
+#define DAMAGE_EVENTS_ONLY 1
 
 // Touch damage is GetSmoothedVelocity().Length() * 0.01, applied as DMG_CRUSH
 // (which breakables don't scale). The resulting health is truncated to an
@@ -223,7 +224,11 @@ static BreakMethod GetPlayerBreakMethod(int entity) {
     if ((spawnFlags & SF_BREAK_PRESSURE) != 0)
         return Break_Pressure;
 
-    if (IsControlledByMap(entity))
+    // Touch and damage both go through CBreakable::OnTakeDamage, which rejects
+    // anything the damage filter doesn't pass. Whether players pass can't be
+    // known ahead of time, so any filter is treated as blocking them.
+    if (IsControlledByMap(entity) ||
+            GetEntPropEnt(entity, Prop_Data, "m_hDamageFilter") != -1)
         return Break_None;
 
     int minHealthDmg = GetEntProp(entity, Prop_Data, "m_iMinHealthDmg");
@@ -244,9 +249,12 @@ static BreakMethod GetPlayerBreakMethod(int entity) {
     // health used is the one after propdata is applied at spawn (e.g.
     // Metal.Medium sets it to 0), which is why this reads the live entity.
     // Checking takedamage rather than health also catches health-0 glass,
-    // which the engine gives 1 health so bullets can pass through it. A player
-    // must also be able to deal minhealthdmg in a single hit.
-    if (GetEntProp(entity, Prop_Data, "m_takedamage") == DAMAGE_NO ||
+    // which the engine gives 1 health so bullets can pass through it.
+    // DAMAGE_EVENTS_ONLY (only settable at runtime) never lowers health, so it
+    // can't be broken this way either. A player must also be able to deal
+    // minhealthdmg in a single hit.
+    int takeDamage = GetEntProp(entity, Prop_Data, "m_takedamage");
+    if (takeDamage == DAMAGE_NO || takeDamage == DAMAGE_EVENTS_ONLY ||
             minHealthDmg > MAX_PLAYER_HIT_DAMAGE)
         return Break_None;
     return Break_Damage;
