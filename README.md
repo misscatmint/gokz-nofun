@@ -22,9 +22,15 @@ broken and the map can still be completed.
 *This section and the notes below are mainly for mappers and server admins.*
 
 A `func_breakable` is broken only if a player could break it themselves. It's
-always skipped if it has the `Only Break on Trigger` flag or the `Unbreakable
-Glass` material. Otherwise, it's broken if a player could break it in one of
-these ways:
+always skipped if it has the `Only Break on Trigger` flag, the `Unbreakable
+Glass` material type, or an `OnBreak` output that targets `!activator`.
+
+The plugin breaks breakables by sending them the `Break` input with no
+activator, so breakables that target `!activator` are skipped to avoid
+situations where the map may rely them, for example to give the player a name
+a filter checks later.
+
+Otherwise, it's broken if a player could break it in one of these ways:
 
 - **Standing on it** - it has the `Break on Pressure` flag.
 - **Colliding with it** - it has the `Break on Touch` flag, and its health and
@@ -61,8 +67,7 @@ loads.
   - outputs that target it by classname, or with a `*` anywhere but the end of
     its name;
   - outputs that target `!activator`, `!caller`, or other `!` names; or
-  - VScript, such as a `logic_script` that heals it.
+  - VScript, such as a `logic_script` that heals it or reacts to its health
+    changing.
 - The map may bring back breakables the plugin broke, for example with a
   `point_template` entity.
-- Breakables are broken without an activator, so `OnBreak` outputs that target
-  `!activator` do nothing.

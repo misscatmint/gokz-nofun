@@ -56,6 +56,10 @@ enum struct LumpEntity {
 }
 
 StringMap g_MapControlledBreakables = null;
+// Breakables with an OnBreak output aimed at !activator. The plugin breaks
+// without an activator, so the output does nothing, and once the breakable is
+// gone no player can trigger it either.
+StringMap g_ActivatorBreakables = null;
 
 public Plugin myinfo = {
     name        = "gokz-nofun",
@@ -75,7 +79,9 @@ public void OnPluginStart() {
 
 public void OnMapStart() {
     delete g_MapControlledBreakables;
+    delete g_ActivatorBreakables;
     g_MapControlledBreakables = new StringMap();
+    g_ActivatorBreakables = new StringMap();
 
     // Targets of outputs (from any entity) that contain a problem string.
     ArrayList healedTargets = new ArrayList(ByteCountToCells(MAX_TARGET_NAME));
@@ -87,6 +93,7 @@ public void OnMapStart() {
     char target[MAX_TARGET_NAME];
     LumpEntity lumpEntity;
     bool controlsSelf = false;
+    bool needsActivator = false;
 
     int totalEntries = EntityLump.Length();
     for (int i = 0; i < totalEntries; ++i) {
@@ -96,10 +103,12 @@ public void OnMapStart() {
         lumpEntity.hammerid[0] = '\0';
         lumpEntity.targetname[0] = '\0';
         controlsSelf = false;
+        needsActivator = false;
 
         // Read the entity's keyvalues and outputs in a single pass. Whether
         // this is a breakable isn't known until classname has been seen, so
-        // anything that would flag it is remembered in controlsSelf.
+        // anything that would flag it is remembered in controlsSelf and
+        // needsActivator.
         int totalKeys = entry.Length;
         for (int j = 0; j < totalKeys; ++j) {
             entry.Get(j, keyName, sizeof(keyName), value, sizeof(value));
@@ -122,11 +131,15 @@ public void OnMapStart() {
                     ContainsProblemString(value))
                 controlsSelf = true;
 
+            int restStart = GetOutputTarget(value, target, sizeof(target));
+            if (restStart != -1 && StrEqual(keyName, "OnBreak", false) &&
+                    StrEqual(target, "!activator", false))
+                needsActivator = true;
+
             // An output aimed at another entity (e.g. a logic_timer firing
             // SetHealth at a breakable) marks its target. !self, !activator,
             // !caller etc. are resolved at runtime, not by name, so they're
             // skipped.
-            int restStart = GetOutputTarget(value, target, sizeof(target));
             if (restStart != -1 && target[0] != '\0' && target[0] != '!' &&
                     ContainsProblemString(value[restStart]))
                 healedTargets.PushString(target);
@@ -137,6 +150,8 @@ public void OnMapStart() {
             breakables.PushArray(lumpEntity);
             if (controlsSelf)
                 g_MapControlledBreakables.SetValue(lumpEntity.hammerid, true);
+            if (needsActivator)
+                g_ActivatorBreakables.SetValue(lumpEntity.hammerid, true);
         }
 
         delete entry;
@@ -162,6 +177,7 @@ public void OnMapStart() {
 
 public void OnMapEnd() {
     delete g_MapControlledBreakables;
+    delete g_ActivatorBreakables;
 }
 
 static bool IsOutputKey(const char[] key) {
@@ -197,12 +213,11 @@ static bool NameMatches(const char[] pattern, const char[] name) {
     return StrEqual(name, pattern, false);
 }
 
-static bool IsControlledByMap(int entity) {
+static bool IsInHammerIdSet(StringMap set, int entity) {
     char hammerid[16];
     IntToString(GetEntProp(entity, Prop_Data, "m_iHammerID"), hammerid,
                            sizeof(hammerid));
-    return (g_MapControlledBreakables != null &&
-            g_MapControlledBreakables.ContainsKey(hammerid));
+    return set != null && set.ContainsKey(hammerid);
 }
 
 // Mirrors CBreakable::BreakTouch and CBreakable::OnTakeDamage from the Source
@@ -219,6 +234,11 @@ static BreakMethod GetPlayerBreakMethod(int entity) {
     if (GetEntProp(entity, Prop_Data, "m_Material") == MATERIAL_UNBREAKABLE_GLASS)
         return Break_None;
 
+    // Every way a player breaks it passes them as the activator, including
+    // pressure, so this has to be checked before the pressure flag.
+    if (IsInHammerIdSet(g_ActivatorBreakables, entity))
+        return Break_None;
+
     // Pressure breaking schedules Die() directly, ignoring health, takedamage
     // and minhealthdmg, so nothing the map does to its health matters.
     if ((spawnFlags & SF_BREAK_PRESSURE) != 0)
@@ -227,7 +247,7 @@ static BreakMethod GetPlayerBreakMethod(int entity) {
     // Touch and damage both go through CBreakable::OnTakeDamage, which rejects
     // anything the damage filter doesn't pass. Whether players pass can't be
     // known ahead of time, so any filter is treated as blocking them.
-    if (IsControlledByMap(entity) ||
+    if (IsInHammerIdSet(g_MapControlledBreakables, entity) ||
             GetEntPropEnt(entity, Prop_Data, "m_hDamageFilter") != -1)
         return Break_None;
 
